@@ -31,7 +31,12 @@ from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
 
 from instructor.mode import Mode
-from instructor.utils import extract_json_from_stream, extract_json_from_stream_async
+from instructor.utils import (
+    extract_json_from_stream,
+    extract_json_from_stream_async,
+    extract_code_block_from_stream,
+    extract_code_block_from_stream_async,
+)
 
 T_Model = TypeVar("T_Model", bound=BaseModel)
 
@@ -166,6 +171,10 @@ class PartialBase(Generic[T_Model]):
 
         if mode == Mode.WRITER_TOOLS:
             yield from cls.writer_model_from_chunks(json_chunks, **kwargs)
+        elif mode == Mode.TOON:
+            yield from cls.toon_model_from_chunks(
+                extract_code_block_from_stream(json_chunks), **kwargs
+            )
         else:
             yield from cls.model_from_chunks(json_chunks, **kwargs)
 
@@ -180,6 +189,10 @@ class PartialBase(Generic[T_Model]):
 
         if mode == Mode.WRITER_TOOLS:
             async for item in cls.writer_model_from_chunks_async(json_chunks, **kwargs):
+                yield item
+        elif mode == Mode.TOON:
+            toon_chunks = extract_code_block_from_stream_async(json_chunks)
+            async for item in cls.toon_model_from_chunks_async(toon_chunks, **kwargs):
                 yield item
         else:
             async for item in cls.model_from_chunks_async(json_chunks, **kwargs):
@@ -277,6 +290,102 @@ class PartialBase(Generic[T_Model]):
             obj = partial_model.model_validate(obj, strict=None, **kwargs)
             yield obj
 
+    @classmethod
+    def toon_model_from_chunks(
+        cls, toon_chunks: Iterable[Any], **kwargs: Any
+    ) -> Generator[T_Model, None, None]:
+        """Parse TOON content from streaming chunks.
+
+        TOON's line-based format allows partial parsing - we decode after each
+        complete line and yield partial models as content streams in.
+        """
+        try:
+            from toon_format import decode
+        except ImportError as e:
+            raise ImportError(
+                "The 'toon-format' package is required for TOON mode streaming. "
+                "Install it with: pip install 'instructor[toon]' or pip install toon-format"
+            ) from e
+
+        partial_model = cls.get_partial_model()
+        full_content = ""
+        last_successful_data: dict[str, Any] | None = None
+
+        for chunk in toon_chunks:
+            full_content += chunk
+
+            if "\n" not in full_content:
+                continue
+
+            last_newline = full_content.rfind("\n")
+            complete_lines = full_content[: last_newline + 1]
+
+            try:
+                data = decode(complete_lines.strip())
+                if data and data != last_successful_data:
+                    last_successful_data = data
+                    yield partial_model.model_validate(data, strict=None, **kwargs)
+            except Exception:
+                pass
+
+        if full_content.strip():
+            try:
+                data = decode(full_content.strip())
+                yield cls.model_validate(data, strict=None, **kwargs)
+            except Exception:
+                if last_successful_data:
+                    yield partial_model.model_validate(
+                        last_successful_data, strict=None, **kwargs
+                    )
+
+    @classmethod
+    async def toon_model_from_chunks_async(
+        cls, toon_chunks: AsyncGenerator[str, None], **kwargs: Any
+    ) -> AsyncGenerator[T_Model, None]:
+        """Parse TOON content from async streaming chunks.
+
+        TOON's line-based format allows partial parsing - we decode after each
+        complete line and yield partial models as content streams in.
+        """
+        try:
+            from toon_format import decode
+        except ImportError as e:
+            raise ImportError(
+                "The 'toon-format' package is required for TOON mode streaming. "
+                "Install it with: pip install 'instructor[toon]' or pip install toon-format"
+            ) from e
+
+        partial_model = cls.get_partial_model()
+        full_content = ""
+        last_successful_data: dict[str, Any] | None = None
+
+        async for chunk in toon_chunks:
+            full_content += chunk
+
+            if "\n" not in full_content:
+                continue
+
+            last_newline = full_content.rfind("\n")
+            complete_lines = full_content[: last_newline + 1]
+
+            try:
+                data = decode(complete_lines.strip())
+                if data and data != last_successful_data:
+                    last_successful_data = data
+                    yield partial_model.model_validate(data, strict=None, **kwargs)
+            except Exception:
+                pass
+
+        if full_content.strip():
+            try:
+                data = decode(full_content.strip())
+                yield cls.model_validate(data, strict=None, **kwargs)
+            except Exception:
+                if last_successful_data:
+                    yield partial_model.model_validate(
+                        last_successful_data, strict=None, **kwargs
+                    )
+
     @staticmethod
     def extract_json(
         completion: Iterable[Any], mode: Mode
@@ -353,6 +462,7 @@ class PartialBase(Generic[T_Model]):
                         Mode.FIREWORKS_JSON,
                         Mode.PERPLEXITY_JSON,
                         Mode.WRITER_JSON,
+                        Mode.TOON,
                     }:
                         if json_chunk := chunk.choices[0].delta.content:
                             yield json_chunk
@@ -443,6 +553,7 @@ class PartialBase(Generic[T_Model]):
                         Mode.FIREWORKS_JSON,
                         Mode.PERPLEXITY_JSON,
                         Mode.WRITER_JSON,
+                        Mode.TOON,
                     }:
                         if json_chunk := chunk.choices[0].delta.content:
                             yield json_chunk

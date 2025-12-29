@@ -23,6 +23,7 @@ class Mode(enum.Enum):
     JSON_O1 = "json_o1"
     MD_JSON = "markdown_json_mode"
     JSON_SCHEMA = "json_schema_mode"
+    TOON = "toon"
 
     # Add new modes to support responses api
     RESPONSES_TOOLS = "responses_tools"
@@ -117,6 +118,7 @@ class Mode(enum.Enum):
             cls.OPENROUTER_STRUCTURED_OUTPUTS,
             cls.MISTRAL_STRUCTURED_OUTPUTS,
             cls.XAI_JSON,
+            cls.TOON,
         }
 
     @classmethod

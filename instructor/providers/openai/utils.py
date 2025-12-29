@@ -482,6 +482,177 @@ def handle_openrouter_structured_outputs(
     return response_model, new_kwargs
 
 
+def _get_type_hint(annotation: Any) -> str:
+    """Get a type hint string for display in structure template."""
+    if annotation is str:
+        return "string"
+    elif annotation is int:
+        return "integer"
+    elif annotation is float:
+        return "number"
+    elif annotation is bool:
+        return "boolean"
+    return ""
+
+
+def _generate_toon_structure(model: type[Any], indent: int = 0) -> str:
+    """
+    Generate a TOON structure template from a Pydantic model.
+
+    Recursively expands nested Pydantic models to show full structure.
+    Includes type hints to help with proper quoting of string values.
+    """
+    from pydantic import BaseModel
+
+    prefix = "  " * indent
+    lines = []
+
+    for field_name, field_info in model.model_fields.items():
+        annotation = field_info.annotation
+        description = field_info.description or f"value for {field_name}"
+        original_annotation = annotation
+
+        origin = getattr(annotation, "__origin__", None)
+        if origin is type(None) or str(origin) == "typing.Union":
+            args = getattr(annotation, "__args__", ())
+            for arg in args:
+                if arg is not type(None):
+                    annotation = arg
+                    original_annotation = arg
+                    break
+
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            lines.append(f"{prefix}{field_name}:")
+            nested_structure = _generate_toon_structure(annotation, indent + 1)
+            lines.append(nested_structure)
+        elif origin is list:
+            args = getattr(annotation, "__args__", ())
+            if args and isinstance(args[0], type) and issubclass(args[0], BaseModel):
+                item_model = args[0]
+                item_fields = list(item_model.model_fields.keys())
+                headers = ",".join(item_fields)
+                lines.append(f"{prefix}{field_name}[N,]{{{headers}}}:")
+                placeholders = ",".join(
+                    f"<{item_model.model_fields[f].description or f}>"
+                    for f in item_fields
+                )
+                lines.append(f"{prefix}  {placeholders}")
+                lines.append(f"{prefix}  ...")
+            else:
+                lines.append(f"{prefix}{field_name}[N]: <value>,<value>,...")
+        elif origin is dict or annotation is dict:
+            lines.append(f"{prefix}{field_name}:")
+            lines.append(f"{prefix}  <key>: <value>")
+        else:
+            type_hint = _get_type_hint(original_annotation)
+            if original_annotation is str:
+                lines.append(f'{prefix}{field_name}: "<{description}>"')
+            elif type_hint:
+                lines.append(f"{prefix}{field_name}: <{description}> ({type_hint})")
+            else:
+                lines.append(f"{prefix}{field_name}: <{description}>")
+
+    return "\n".join(lines)
+
+
+def reask_toon(
+    kwargs: dict[str, Any],
+    response: Any,
+    exception: Exception,
+    failed_attempts: list[Any] | None = None,  # noqa: ARG001
+):
+    """
+    Handle reask for TOON mode when validation fails.
+
+    Kwargs modifications:
+    - Adds: "messages" (user message requesting TOON correction)
+    """
+    kwargs = kwargs.copy()
+    reask_msgs = [dump_message(response.choices[0].message)]
+
+    reask_msgs.append(
+        {
+            "role": "user",
+            "content": (
+                f"Validation Error found in your TOON response:\n{exception}\n\n"
+                "Please correct your response and return valid TOON format. "
+                "Return your corrected response in a ```toon code block."
+            ),
+        }
+    )
+    kwargs["messages"].extend(reask_msgs)
+    kwargs["messages"] = merge_consecutive_messages(kwargs["messages"])
+    return kwargs
+
+
+def handle_toon(
+    response_model: type[Any] | None, new_kwargs: dict[str, Any]
+) -> tuple[type[Any] | None, dict[str, Any]]:
+    """
+    Handle TOON (Token-Oriented Object Notation) mode.
+
+    TOON is a compact format that achieves 30-60% token reduction compared to JSON.
+    This mode uses plain text output similar to MD_JSON, parsing the response text
+    instead of using tool calls.
+
+    Kwargs modifications:
+    - When response_model is None: No modifications
+    - When response_model is provided:
+      - Modifies: "messages" (adds TOON structure template to system message)
+
+    Raises:
+        ImportError: If toon-format package is not installed
+    """
+    if response_model is None:
+        return None, new_kwargs
+
+    try:
+        import toon_format  # noqa: F401
+    except ImportError as e:
+        raise ImportError(
+            "The 'toon-format' package is required for TOON mode. "
+            "Install it with: pip install 'instructor[toon]' or pip install toon-format"
+        ) from e
+
+    toon_structure = _generate_toon_structure(response_model)
+    message = dedent(f"""
+        Respond using TOON format (Token-Oriented Object Notation).
+        Use this exact structure:
+
+        ```toon
+{toon_structure}
+        ```
+
+        TOON syntax:
+        - key: value for simple fields
+        - 2-space indentation for nested objects
+        - [N] for array length: items[3]: a,b,c
+        - [N,]{{fields}}: for tabular arrays (one row per line)
+
+        Quoting rules:
+        - Strings that look like numbers MUST be quoted: zip: "10001"
+        - Empty strings need quotes: name: ""
+        - Fields marked (integer), (number), (boolean) should NOT be quoted
+    """).strip()
+
+    messages = new_kwargs.get("messages", [])
+    if not messages:
+        messages = [{"role": "system", "content": message}]
+    elif messages[0]["role"] != "system":
+        messages.insert(0, {"role": "system", "content": message})
+    elif isinstance(messages[0]["content"], str):
+        messages[0]["content"] += f"\n\n{message}"
+    elif isinstance(messages[0]["content"], list):
+        messages[0]["content"].append({"type": "text", "text": f"\n\n{message}"})
+    else:
+        raise ValueError(
+            "Invalid message format, must be a string or a list of messages"
+        )
+
+    new_kwargs["messages"] = messages
+    return response_model, new_kwargs
+
+
 # Handler registry for OpenAI
 OPENAI_HANDLERS = {
     Mode.TOOLS: {
@@ -527,5 +698,9 @@ OPENAI_HANDLERS = {
     Mode.OPENROUTER_STRUCTURED_OUTPUTS: {
         "reask": reask_md_json,
         "response": handle_openrouter_structured_outputs,
+    },
+    Mode.TOON: {
+        "reask": reask_toon,
+        "response": handle_toon,
     },
 }

@@ -133,10 +133,12 @@ from ..providers.openai.utils import (
     handle_responses_tools_with_inbuilt_tools,
     handle_tools,
     handle_tools_strict,
+    handle_toon,
     reask_default,
     reask_md_json,
     reask_responses_tools,
     reask_tools,
+    reask_toon,
 )
 
 # Perplexity utils
@@ -464,6 +466,7 @@ def handle_response_model(
         Mode.RESPONSES_TOOLS_WITH_INBUILT_TOOLS: handle_responses_tools_with_inbuilt_tools,
         Mode.XAI_JSON: handle_xai_json,
         Mode.XAI_TOOLS: handle_xai_tools,
+        Mode.TOON: handle_toon,
     }
 
     if mode in mode_handlers:
@@ -662,6 +665,8 @@ def handle_reask_kwargs(
         # XAI modes
         Mode.XAI_JSON: reask_xai_json,
         Mode.XAI_TOOLS: reask_xai_tools,
+        # TOON mode
+        Mode.TOON: reask_toon,
     }
 
     if mode in REASK_HANDLERS:

@@ -195,6 +195,9 @@ class OpenAISchema(BaseModel):
         if mode == Mode.WRITER_JSON:
             return cls.parse_writer_json(completion, validation_context, strict)
 
+        if mode == Mode.TOON:
+            return cls.parse_toon(completion, validation_context, strict)
+
         if mode in {Mode.RESPONSES_TOOLS, Mode.RESPONSES_TOOLS_WITH_INBUILT_TOOLS}:
             return cls.parse_responses_tools(
                 completion,
@@ -780,6 +783,86 @@ class OpenAISchema(BaseModel):
 
         # Validate the model from the JSON
         return _validate_model_from_json(cls, json_content, validation_context, strict)
+
+    @classmethod
+    def parse_toon(
+        cls: type[BaseModel],
+        completion: ChatCompletion,
+        validation_context: Optional[dict[str, Any]] = None,
+        strict: Optional[bool] = None,
+    ) -> BaseModel:
+        """Parse TOON mode responses.
+
+        TOON (Token-Oriented Object Notation) is a compact format that achieves
+        ~60% token reduction compared to JSON. This method extracts TOON content
+        from the response and decodes it to a Pydantic model.
+        """
+        _handle_incomplete_output(completion)
+
+        message = _extract_text_content(completion)
+        if not message:
+            if hasattr(completion, "choices") and completion.choices:
+                message = completion.choices[0].message.content or ""
+
+        if not message:
+            raise ResponseParsingError(
+                "No text content found in TOON response",
+                mode="TOON",
+                raw_response=completion,
+            )
+
+        toon_content = _extract_toon_from_response(message)
+
+        if not toon_content:
+            raise ResponseParsingError(
+                "Could not extract TOON content from response",
+                mode="TOON",
+                raw_response=completion,
+            )
+
+        try:
+            from toon_format import decode
+
+            try:
+                data = decode(toon_content)
+                return cls.model_validate(
+                    data,
+                    context=validation_context,
+                    strict=strict if strict is not None else False,
+                )
+            except Exception as e:
+                raise ResponseParsingError(
+                    f"Failed to parse TOON content: {e}",
+                    mode="TOON",
+                    raw_response=completion,
+                ) from e
+
+        except ImportError as e:
+            raise ImportError(
+                "The 'toon-format' package is required for TOON mode. "
+                "Install it with: pip install 'instructor[toon]' or pip install toon-format"
+            ) from e
+
+
+def _extract_toon_from_response(text: str) -> str:
+    """Extract TOON content from an LLM response.
+
+    Handles ```toon code blocks, generic code blocks, and raw TOON content.
+    """
+    if not text:
+        return ""
+
+    text = text.strip()
+
+    toon_match = re.search(r"```toon\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if toon_match:
+        return toon_match.group(1).strip()
+
+    generic_match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
+    if generic_match:
+        return generic_match.group(1).strip()
+
+    return text
 
 
 def openai_schema(cls: type[BaseModel]) -> OpenAISchema:
