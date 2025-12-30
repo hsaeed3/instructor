@@ -482,17 +482,54 @@ def handle_openrouter_structured_outputs(
     return response_model, new_kwargs
 
 
-def _get_type_hint(annotation: Any) -> str:
-    """Get a type hint string for display in structure template."""
+def _format_type_for_toon(annotation: Any, description: str) -> str:
+    """Format a type annotation for TOON structure display."""
+    import typing
+    from enum import Enum
+
+    origin = getattr(annotation, "__origin__", None)
+
+    if origin is typing.Annotated:
+        args = getattr(annotation, "__args__", ())
+        if args:
+            return _format_type_for_toon(args[0], description)
+
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        choices = "|".join(str(m.value) for m in annotation)
+        return f"<{choices}>"
+
+    if origin is typing.Literal:
+        choices = "|".join(str(v) for v in getattr(annotation, "__args__", ()))
+        return f"<{choices}>"
+
+    if origin is typing.Union:
+        args = [arg for arg in getattr(annotation, "__args__", ()) if arg is not type(None)]
+        type_names = []
+        for t in args:
+            if t is str:
+                type_names.append("string")
+            elif t is int:
+                type_names.append("integer")
+            elif t is float:
+                type_names.append("number")
+            elif t is bool:
+                type_names.append("boolean")
+            elif isinstance(t, type) and issubclass(t, Enum):
+                type_names.append("|".join(str(m.value) for m in t))
+            else:
+                type_names.append(str(t.__name__) if hasattr(t, "__name__") else str(t))
+        return f"<{' or '.join(type_names)}>"
+
     if annotation is str:
-        return "string"
+        return f'"<{description}>"'
     elif annotation is int:
-        return "integer"
+        return f"<{description}> (integer)"
     elif annotation is float:
-        return "number"
+        return f"<{description}> (number)"
     elif annotation is bool:
-        return "boolean"
-    return ""
+        return "<true|false>"
+    else:
+        return f"<{description}>"
 
 
 def _generate_toon_structure(model: type[Any], indent: int = 0) -> str:
@@ -500,8 +537,9 @@ def _generate_toon_structure(model: type[Any], indent: int = 0) -> str:
     Generate a TOON structure template from a Pydantic model.
 
     Recursively expands nested Pydantic models to show full structure.
-    Includes type hints to help with proper quoting of string values.
+    Handles Enums, Literals, Unions, Annotated, and nested types.
     """
+    import typing
     from pydantic import BaseModel
 
     prefix = "  " * indent
@@ -510,16 +548,26 @@ def _generate_toon_structure(model: type[Any], indent: int = 0) -> str:
     for field_name, field_info in model.model_fields.items():
         annotation = field_info.annotation
         description = field_info.description or f"value for {field_name}"
-        original_annotation = annotation
 
         origin = getattr(annotation, "__origin__", None)
+        if origin is typing.Annotated:
+            args = getattr(annotation, "__args__", ())
+            if args:
+                annotation = args[0]
+                origin = getattr(annotation, "__origin__", None)
+
+        original_annotation = annotation
+
         if origin is type(None) or str(origin) == "typing.Union":
             args = getattr(annotation, "__args__", ())
-            for arg in args:
-                if arg is not type(None):
-                    annotation = arg
-                    original_annotation = arg
-                    break
+            non_none_args = [arg for arg in args if arg is not type(None)]
+            if len(non_none_args) == 1:
+                annotation = non_none_args[0]
+                original_annotation = non_none_args[0]
+            elif len(non_none_args) > 1:
+                formatted = _format_type_for_toon(annotation, description)
+                lines.append(f"{prefix}{field_name}: {formatted}")
+                continue
 
         if isinstance(annotation, type) and issubclass(annotation, BaseModel):
             lines.append(f"{prefix}{field_name}:")
@@ -544,13 +592,8 @@ def _generate_toon_structure(model: type[Any], indent: int = 0) -> str:
             lines.append(f"{prefix}{field_name}:")
             lines.append(f"{prefix}  <key>: <value>")
         else:
-            type_hint = _get_type_hint(original_annotation)
-            if original_annotation is str:
-                lines.append(f'{prefix}{field_name}: "<{description}>"')
-            elif type_hint:
-                lines.append(f"{prefix}{field_name}: <{description}> ({type_hint})")
-            else:
-                lines.append(f"{prefix}{field_name}: <{description}>")
+            formatted = _format_type_for_toon(original_annotation, description)
+            lines.append(f"{prefix}{field_name}: {formatted}")
 
     return "\n".join(lines)
 

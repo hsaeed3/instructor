@@ -102,6 +102,76 @@ def _validate_model_from_json(
         raise
 
 
+def _coerce_enums_for_model(model: type[BaseModel], data: dict[str, Any]) -> dict[str, Any]:
+    """Coerce string values to enum instances for fields that expect enums."""
+    from enum import Enum
+    import typing
+
+    if not isinstance(data, dict):
+        return data
+
+    result = data.copy()
+
+    for field_name, field_info in model.model_fields.items():
+        if field_name not in result:
+            continue
+
+        annotation = field_info.annotation
+        origin = getattr(annotation, "__origin__", None)
+
+        if origin is typing.Union or str(origin) == "typing.Union":
+            args = getattr(annotation, "__args__", ())
+            for arg in args:
+                if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Enum):
+                    annotation = arg
+                    break
+
+        if isinstance(annotation, type) and issubclass(annotation, Enum):
+            value = result[field_name]
+            if isinstance(value, str):
+                for member in annotation:
+                    if member.value == value or member.name == value:
+                        result[field_name] = member
+                        break
+
+        elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            if isinstance(result[field_name], dict):
+                result[field_name] = _coerce_enums_for_model(annotation, result[field_name])
+
+        elif origin is list:
+            args = getattr(annotation, "__args__", ())
+            if args and isinstance(args[0], type) and issubclass(args[0], BaseModel):
+                item_model = args[0]
+                if isinstance(result[field_name], list):
+                    result[field_name] = [
+                        _coerce_enums_for_model(item_model, item) if isinstance(item, dict) else item
+                        for item in result[field_name]
+                    ]
+
+    return result
+
+
+def _extract_toon_from_response(text: str) -> str:
+    """Extract TOON content from an LLM response.
+
+    Handles ```toon code blocks, generic code blocks, and raw TOON content.
+    """
+    if not text:
+        return ""
+
+    text = text.strip()
+
+    toon_match = re.search(r"```toon\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if toon_match:
+        return toon_match.group(1).strip()
+
+    generic_match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
+    if generic_match:
+        return generic_match.group(1).strip()
+
+    return text
+
+
 class OpenAISchema(BaseModel):
     # Ignore classproperty, since Pydantic doesn't understand it like it would a normal property.
     model_config = ConfigDict(ignored_types=(classproperty,))
@@ -825,6 +895,7 @@ class OpenAISchema(BaseModel):
 
             try:
                 data = decode(toon_content)
+                data = _coerce_enums_for_model(cls, data)
                 return cls.model_validate(
                     data,
                     context=validation_context,
@@ -842,27 +913,6 @@ class OpenAISchema(BaseModel):
                 "The 'toon-format' package is required for TOON mode. "
                 "Install it with: pip install 'instructor[toon]' or pip install toon-format"
             ) from e
-
-
-def _extract_toon_from_response(text: str) -> str:
-    """Extract TOON content from an LLM response.
-
-    Handles ```toon code blocks, generic code blocks, and raw TOON content.
-    """
-    if not text:
-        return ""
-
-    text = text.strip()
-
-    toon_match = re.search(r"```toon\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
-    if toon_match:
-        return toon_match.group(1).strip()
-
-    generic_match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
-    if generic_match:
-        return generic_match.group(1).strip()
-
-    return text
 
 
 def openai_schema(cls: type[BaseModel]) -> OpenAISchema:

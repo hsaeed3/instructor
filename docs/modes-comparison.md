@@ -22,6 +22,7 @@ Here's a quick comparison:
 | `MD_JSON` | JSON in Markdown code blocks | Cleaner prompts | Most providers |
 | `TOOLS_STRICT` | Stricter version of TOOLS | Production systems | OpenAI, Azure |
 | `JSON_O1` | One-shot completion with JSON | Simple extractions | OpenAI, Azure |
+| `TOON` | Token-Oriented Object Notation | Shortest outputs | OpenAI, Azure, LiteLLM, etc. |
 | `ANTHROPIC_TOOLS` | Anthropic's tool calling | Claude models | Anthropic |
 | `ANTHROPIC_JSON` | Direct JSON with Claude | Claude models | Anthropic |
 | `GENAI_TOOLS` | Google's function calling (new) | Gemini models | Google |
@@ -85,6 +86,30 @@ This mode instructs the model to output JSON inside a Markdown code block. It:
 - May lead to cleaner outputs
 
 **Best for**: Simple structures when you want cleaner outputs.
+
+#### `TOON` Mode
+
+```python
+client = instructor.from_provider("openai/gpt-5-nano", mode=instructor.Mode.TOON)
+```
+
+This mode instructs the model to output [TOON](https://github.com/toon-format/toon) (Token-Oriented Object Notation) format. It is a compact format that achieves:
+
+- ~17% output token reduction compared to Mode.JSON
+- ~20% output token reduction compared to Mode.MD_JSON
+- ~28% output token reduction compared to Mode.TOOLS
+
+**Best for**: Models that don't support tool calling/simple extractions, or in cases where you want the shortest possible output.
+
+**Advantages**: More efficient as schema complexity increases, along with high model compatibility.
+
+!!! note
+
+    TOON mode requires the `toon-format` package to be installed. Install it with:
+
+    ```bash
+    pip install instructor[toon]
+    ```
 
 ### Anthropic Modes
 

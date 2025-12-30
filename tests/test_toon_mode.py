@@ -5,6 +5,8 @@ These tests verify the TOON mode implementation in instructor.
 """
 
 import pytest
+from enum import Enum
+from typing import Annotated, Literal, Optional, Union
 from unittest.mock import MagicMock
 from pydantic import BaseModel, Field
 
@@ -14,6 +16,12 @@ from instructor.providers.openai.utils import (
     reask_toon,
     _generate_toon_structure,
 )
+
+
+class Priority(Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class SimpleUser(BaseModel):
@@ -35,6 +43,42 @@ class UserWithTags(BaseModel):
 
     name: str = Field(description="The user's name")
     tags: list[str] = Field(description="Tags associated with the user")
+
+
+class TaskWithEnum(BaseModel):
+    """A task model with an enum field."""
+
+    title: str = Field(description="Task title")
+    priority: Priority = Field(description="Task priority")
+
+
+class TaskWithLiteral(BaseModel):
+    """A task model with a literal field."""
+
+    title: str = Field(description="Task title")
+    status: Literal["pending", "in_progress", "done"] = Field(description="Task status")
+
+
+class TaskWithOptional(BaseModel):
+    """A task model with optional fields."""
+
+    title: str = Field(description="Task title")
+    assignee: Optional[str] = Field(default=None, description="Assignee name")
+
+
+class TaskWithUnion(BaseModel):
+    """A task model with union field."""
+
+    title: str = Field(description="Task title")
+    value: Union[int, str] = Field(description="A value that can be int or string")
+
+
+class TaskWithAnnotated(BaseModel):
+    """A task model with annotated fields."""
+
+    title: Annotated[str, Field(description="Task title")]
+    priority: Annotated[Priority, Field(description="Task priority level")]
+    count: Annotated[int, Field(description="Item count", ge=0)]
 
 
 class TestToonModeEnum:
@@ -69,6 +113,45 @@ class TestGenerateToonStructure:
         structure = _generate_toon_structure(UserWithAddress)
         assert "name" in structure
         assert "address" in structure
+
+    def test_structure_with_enum(self):
+        """Test structure generation includes enum values."""
+        structure = _generate_toon_structure(TaskWithEnum)
+        assert "priority" in structure
+        assert "low" in structure
+        assert "medium" in structure
+        assert "high" in structure
+
+    def test_structure_with_literal(self):
+        """Test structure generation includes literal values."""
+        structure = _generate_toon_structure(TaskWithLiteral)
+        assert "status" in structure
+        assert "pending" in structure
+        assert "in_progress" in structure
+        assert "done" in structure
+
+    def test_structure_with_optional(self):
+        """Test structure generation handles optional fields."""
+        structure = _generate_toon_structure(TaskWithOptional)
+        assert "title" in structure
+        assert "assignee" in structure
+
+    def test_structure_with_union(self):
+        """Test structure generation handles union types."""
+        structure = _generate_toon_structure(TaskWithUnion)
+        assert "value" in structure
+        assert "integer" in structure or "string" in structure
+
+    def test_structure_with_annotated(self):
+        """Test structure generation handles Annotated types."""
+        structure = _generate_toon_structure(TaskWithAnnotated)
+        assert "title" in structure
+        assert "priority" in structure
+        assert "low" in structure
+        assert "medium" in structure
+        assert "high" in structure
+        assert "count" in structure
+        assert "integer" in structure
 
 
 class TestHandleToon:

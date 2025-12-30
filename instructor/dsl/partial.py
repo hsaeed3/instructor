@@ -307,7 +307,10 @@ class PartialBase(Generic[T_Model]):
                 "Install it with: pip install 'instructor[toon]' or pip install toon-format"
             ) from e
 
+        from instructor.processing.function_calls import _coerce_enums_for_model
+
         partial_model = cls.get_partial_model()
+        base_model = cls.__mro__[1] if len(cls.__mro__) > 1 else cls
         full_content = ""
         last_successful_data: dict[str, Any] | None = None
 
@@ -324,6 +327,7 @@ class PartialBase(Generic[T_Model]):
                 data = decode(complete_lines.strip())
                 if data and data != last_successful_data:
                     last_successful_data = data
+                    data = _coerce_enums_for_model(base_model, data)
                     yield partial_model.model_validate(data, strict=None, **kwargs)
             except Exception:
                 pass
@@ -331,12 +335,12 @@ class PartialBase(Generic[T_Model]):
         if full_content.strip():
             try:
                 data = decode(full_content.strip())
+                data = _coerce_enums_for_model(base_model, data)
                 yield cls.model_validate(data, strict=None, **kwargs)
             except Exception:
                 if last_successful_data:
-                    yield partial_model.model_validate(
-                        last_successful_data, strict=None, **kwargs
-                    )
+                    coerced = _coerce_enums_for_model(base_model, last_successful_data)
+                    yield partial_model.model_validate(coerced, strict=None, **kwargs)
 
     @classmethod
     async def toon_model_from_chunks_async(
@@ -355,7 +359,10 @@ class PartialBase(Generic[T_Model]):
                 "Install it with: pip install 'instructor[toon]' or pip install toon-format"
             ) from e
 
+        from instructor.processing.function_calls import _coerce_enums_for_model
+
         partial_model = cls.get_partial_model()
+        base_model = cls.__mro__[1] if len(cls.__mro__) > 1 else cls
         full_content = ""
         last_successful_data: dict[str, Any] | None = None
 
@@ -372,6 +379,7 @@ class PartialBase(Generic[T_Model]):
                 data = decode(complete_lines.strip())
                 if data and data != last_successful_data:
                     last_successful_data = data
+                    data = _coerce_enums_for_model(base_model, data)
                     yield partial_model.model_validate(data, strict=None, **kwargs)
             except Exception:
                 pass
@@ -379,12 +387,12 @@ class PartialBase(Generic[T_Model]):
         if full_content.strip():
             try:
                 data = decode(full_content.strip())
+                data = _coerce_enums_for_model(base_model, data)
                 yield cls.model_validate(data, strict=None, **kwargs)
             except Exception:
                 if last_successful_data:
-                    yield partial_model.model_validate(
-                        last_successful_data, strict=None, **kwargs
-                    )
+                    coerced = _coerce_enums_for_model(base_model, last_successful_data)
+                    yield partial_model.model_validate(coerced, strict=None, **kwargs)
 
     @staticmethod
     def extract_json(
