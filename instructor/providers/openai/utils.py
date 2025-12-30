@@ -507,13 +507,13 @@ def _format_type_for_toon(annotation: Any, description: str) -> str:
         type_names = []
         for t in args:
             if t is str:
-                type_names.append("string")
+                type_names.append("str")
             elif t is int:
-                type_names.append("integer")
+                type_names.append("int")
             elif t is float:
-                type_names.append("number")
+                type_names.append("float")
             elif t is bool:
-                type_names.append("boolean")
+                type_names.append("bool")
             elif isinstance(t, type) and issubclass(t, Enum):
                 type_names.append("|".join(str(m.value) for m in t))
             else:
@@ -521,13 +521,13 @@ def _format_type_for_toon(annotation: Any, description: str) -> str:
         return f"<{' or '.join(type_names)}>"
 
     if annotation is str:
-        return f'"<{description}>"'
+        return f'"<str>"'
     elif annotation is int:
-        return f"<{description}> (integer)"
+        return "<int>"
     elif annotation is float:
-        return f"<{description}> (number)"
+        return "<float>"
     elif annotation is bool:
-        return "<true|false>"
+        return "<bool>"
     else:
         return f"<{description}>"
 
@@ -617,9 +617,13 @@ def reask_toon(
         {
             "role": "user",
             "content": (
-                f"Validation Error found in your TOON response:\n{exception}\n\n"
-                "Please correct your response and return valid TOON format. "
-                "Return your corrected response in a ```toon code block."
+                f"Validation error:\n{exception}\n\n"
+                "Fix your TOON response:\n"
+                "- int fields: whole numbers, no quotes (age: 25)\n"
+                "- float fields: decimals, no quotes (price: 19.99)\n"
+                "- str fields: quoted (name: \"Alice\")\n"
+                "- Array [N] must match actual count\n\n"
+                "Return corrected TOON in a ```toon code block."
             ),
         }
     )
@@ -659,23 +663,25 @@ def handle_toon(
 
     toon_structure = _generate_toon_structure(response_model)
     message = dedent(f"""
-        Respond using TOON format (Token-Oriented Object Notation).
-        Use this exact structure:
+        Respond in TOON format inside a ```toon code block.
 
+        Structure:
         ```toon
 {toon_structure}
         ```
 
-        TOON syntax:
-        - key: value for simple fields
-        - 2-space indentation for nested objects
-        - [N] for array length: items[3]: a,b,c
-        - [N,]{{fields}}: for tabular arrays (one row per line)
+        Rules:
+        - 2-space indentation for nesting
+        - Arrays: field[N]: val1,val2,val3 where N = actual count
+        - Tables: field[N,]{{col1,col2}}: with one row per line
 
-        Quoting rules:
-        - Strings that look like numbers MUST be quoted: zip: "10001"
-        - Empty strings need quotes: name: ""
-        - Fields marked (integer), (number), (boolean) should NOT be quoted
+        Value formatting:
+        - <int>: whole numbers without quotes (e.g., age: 25)
+        - <float>: decimal numbers without quotes (e.g., price: 19.99)
+        - "<str>": quoted strings (e.g., name: "Alice", zip: "10001")
+        - <bool>: true or false
+
+        IMPORTANT: Output values only, not the type placeholders.
     """).strip()
 
     messages = new_kwargs.get("messages", [])
