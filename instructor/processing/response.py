@@ -63,8 +63,10 @@ from ..providers.anthropic.utils import (
     handle_anthropic_parallel_tools,
     handle_anthropic_reasoning_tools,
     handle_anthropic_tools,
+    handle_anthropic_toon,
     reask_anthropic_json,
     reask_anthropic_tools,
+    reask_anthropic_toon,
 )
 
 # Bedrock utils
@@ -442,6 +444,7 @@ def handle_response_model(
         Mode.ANTHROPIC_TOOLS: handle_anthropic_tools,
         Mode.ANTHROPIC_REASONING_TOOLS: handle_anthropic_reasoning_tools,
         Mode.ANTHROPIC_JSON: handle_anthropic_json,
+        Mode.ANTHROPIC_TOON: handle_anthropic_toon,
         Mode.COHERE_JSON_SCHEMA: handle_cohere_json_schema,
         Mode.COHERE_TOOLS: handle_cohere_tools,
         Mode.GEMINI_JSON: handle_gemini_json,
@@ -634,6 +637,7 @@ def handle_reask_kwargs(
         Mode.ANTHROPIC_REASONING_TOOLS: reask_anthropic_tools,
         Mode.ANTHROPIC_JSON: reask_anthropic_json,
         Mode.ANTHROPIC_PARALLEL_TOOLS: reask_anthropic_tools,
+        Mode.ANTHROPIC_TOON: reask_anthropic_toon,
         # Cohere modes
         Mode.COHERE_TOOLS: reask_cohere_tools,
         Mode.COHERE_JSON_SCHEMA: reask_cohere_tools,

@@ -38,6 +38,7 @@ class Mode(enum.Enum):
     ANTHROPIC_REASONING_TOOLS = "anthropic_reasoning_tools"
     ANTHROPIC_JSON = "anthropic_json"
     ANTHROPIC_PARALLEL_TOOLS = "anthropic_parallel_tools"
+    ANTHROPIC_TOON = "anthropic_toon"
 
     # Mistral modes
     MISTRAL_TOOLS = "mistral_tools"
@@ -107,6 +108,7 @@ class Mode(enum.Enum):
             cls.MD_JSON,
             cls.JSON_SCHEMA,
             cls.ANTHROPIC_JSON,
+            cls.ANTHROPIC_TOON,
             cls.VERTEXAI_JSON,
             cls.GEMINI_JSON,
             cls.COHERE_JSON_SCHEMA,

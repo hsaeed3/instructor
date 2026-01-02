@@ -227,6 +227,9 @@ class OpenAISchema(BaseModel):
         if mode == Mode.ANTHROPIC_JSON:
             return cls.parse_anthropic_json(completion, validation_context, strict)
 
+        if mode == Mode.ANTHROPIC_TOON:
+            return cls.parse_anthropic_toon(completion, validation_context, strict)
+
         if mode == Mode.BEDROCK_JSON:
             return cls.parse_bedrock_json(completion, validation_context, strict)
 
@@ -487,6 +490,43 @@ class OpenAISchema(BaseModel):
             model = cls.model_validate(parsed, context=validation_context, strict=False)
 
         return model
+
+    @classmethod
+    def parse_anthropic_toon(
+        cls: type[BaseModel],
+        completion: ChatCompletion,
+        validation_context: Optional[dict[str, Any]] = None,
+        strict: Optional[bool] = None,
+    ) -> BaseModel:
+        from anthropic.types import Message
+
+        if hasattr(completion, "choices"):
+            completion = completion.choices[0]
+            if completion.finish_reason == "length":
+                raise IncompleteOutputException(last_completion=completion)
+            text = completion.message.content
+        else:
+            assert isinstance(completion, Message)
+            if completion.stop_reason == "max_tokens":
+                raise IncompleteOutputException(last_completion=completion)
+            text_blocks = [c for c in completion.content if c.type == "text"]
+            text = text_blocks[-1].text
+
+        toon_content = _extract_toon_from_response(text)
+        try:
+            from toon_format import decode
+            data = decode(toon_content)
+            data = _coerce_enums_for_model(cls, data)
+            return cls.model_validate(
+                data,
+                context=validation_context,
+                strict=strict if strict is not None else False,
+            )
+        except ImportError as e:
+            raise ImportError(
+                "The 'toon-format' package is required for TOON mode. "
+                "Install it with: pip install 'instructor[toon]' or pip install toon-format"
+            ) from e
 
     @classmethod
     def parse_bedrock_json(

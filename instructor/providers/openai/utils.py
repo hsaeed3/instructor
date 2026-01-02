@@ -577,15 +577,29 @@ def _generate_toon_structure(model: type[Any], indent: int = 0) -> str:
             args = getattr(annotation, "__args__", ())
             if args and isinstance(args[0], type) and issubclass(args[0], BaseModel):
                 item_model = args[0]
-                item_fields = list(item_model.model_fields.keys())
-                headers = ",".join(item_fields)
-                lines.append(f"{prefix}{field_name}[N,]{{{headers}}}:")
-                placeholders = ",".join(
-                    f"<{item_model.model_fields[f].description or f}>"
-                    for f in item_fields
+                # Check if any field in item_model is a list (can't use tabular format)
+                has_nested_list = any(
+                    getattr(f.annotation, "__origin__", None) is list
+                    for f in item_model.model_fields.values()
                 )
-                lines.append(f"{prefix}  {placeholders}")
-                lines.append(f"{prefix}  ...")
+                if has_nested_list:
+                    # Use list format with nested objects for complex types
+                    lines.append(f"{prefix}{field_name}[N]:")
+                    lines.append(f"{prefix}  - <item>:")
+                    nested = _generate_toon_structure(item_model, indent + 2)
+                    lines.append(nested)
+                    lines.append(f"{prefix}  ...")
+                else:
+                    # Use tabular format for simple objects
+                    item_fields = list(item_model.model_fields.keys())
+                    headers = ",".join(item_fields)
+                    lines.append(f"{prefix}{field_name}[N,]{{{headers}}}:")
+                    placeholders = ",".join(
+                        f"<{item_model.model_fields[f].description or f}>"
+                        for f in item_fields
+                    )
+                    lines.append(f"{prefix}  {placeholders}")
+                    lines.append(f"{prefix}  ...")
             else:
                 lines.append(f"{prefix}{field_name}[N]: <value>,<value>,...")
         elif origin is dict or annotation is dict:

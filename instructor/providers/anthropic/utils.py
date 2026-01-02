@@ -439,6 +439,116 @@ def handle_anthropic_parallel_tools(
     return AnthropicParallelModel(typehint=response_model), new_kwargs
 
 
+def handle_anthropic_toon(
+    response_model: type[Any] | None, new_kwargs: dict[str, Any]
+) -> tuple[type[Any] | None, dict[str, Any]]:
+    """
+    Handle TOON (Token-Oriented Object Notation) mode for Anthropic.
+
+    TOON is a compact format that achieves 30-60% token reduction compared to JSON.
+    This mode instructs Claude to return TOON-formatted responses in a code block.
+
+    Kwargs modifications:
+    - Modifies: "messages" (removes system messages)
+    - Adds/Modifies: "system" (adds TOON structure template)
+
+    Raises:
+        ImportError: If toon-format package is not installed
+    """
+    system_messages = extract_system_messages(new_kwargs.get("messages", []))
+
+    if system_messages:
+        new_kwargs["system"] = combine_system_messages(
+            new_kwargs.get("system"), system_messages
+        )
+
+    new_kwargs["messages"] = [
+        m for m in new_kwargs.get("messages", []) if m["role"] != "system"
+    ]
+
+    if response_model is None:
+        return None, new_kwargs
+
+    try:
+        import toon_format  # noqa: F401
+    except ImportError as e:
+        raise ImportError(
+            "The 'toon-format' package is required for TOON mode. "
+            "Install it with: pip install 'instructor[toon]' or pip install toon-format"
+        ) from e
+
+    from ..openai.utils import _generate_toon_structure
+
+    toon_structure = _generate_toon_structure(response_model)
+    toon_message = dedent(f"""
+        Respond in TOON format inside a ```toon code block.
+
+        Structure:
+        ```toon
+{toon_structure}
+        ```
+
+        Rules:
+        - 2-space indentation for nesting
+        - Arrays: field[N]: val1,val2,val3 where N = actual count
+        - Tables: field[N,]{{col1,col2}}: with one row per line
+
+        Value formatting:
+        - <int>: whole numbers without quotes (e.g., age: 25)
+        - <float>: decimal numbers without quotes (e.g., price: 19.99)
+        - "<str>": quoted strings (e.g., name: "Alice", zip: "10001")
+        - <bool>: true or false
+
+        IMPORTANT: Output values only, not the type placeholders.
+    """).strip()
+
+    new_kwargs["system"] = combine_system_messages(
+        new_kwargs.get("system"),
+        [{"type": "text", "text": toon_message}],
+    )
+
+    return response_model, new_kwargs
+
+
+def reask_anthropic_toon(
+    kwargs: dict[str, Any],
+    response: Any,
+    exception: Exception,
+):
+    """
+    Handle reask for Anthropic TOON mode when validation fails.
+
+    Kwargs modifications:
+    - Adds: "messages" (user message requesting TOON correction)
+    """
+    kwargs = kwargs.copy()
+    from anthropic.types import Message
+
+    assert isinstance(response, Message), "Response must be a Anthropic Message"
+
+    text_blocks = [c for c in response.content if c.type == "text"]
+    if not text_blocks:
+        text_content = "No text content found in response"
+    else:
+        text_content = text_blocks[-1].text
+
+    reask_msg = {
+        "role": "user",
+        "content": (
+            f"Validation error:\n{exception}\n\n"
+            f"Your previous response:\n{text_content}\n\n"
+            "Fix your TOON response:\n"
+            "- int fields: whole numbers, no quotes (age: 25)\n"
+            "- float fields: decimals, no quotes (price: 19.99)\n"
+            "- str fields: quoted (name: \"Alice\")\n"
+            "- Array [N] must match actual count\n\n"
+            "Return corrected TOON in a ```toon code block."
+        ),
+    }
+    kwargs["messages"].append(reask_msg)
+    return kwargs
+
+
 # Handler registry for Anthropic
 ANTHROPIC_HANDLERS = {
     Mode.ANTHROPIC_TOOLS: {
@@ -456,5 +566,9 @@ ANTHROPIC_HANDLERS = {
     Mode.ANTHROPIC_PARALLEL_TOOLS: {
         "reask": reask_anthropic_tools,
         "response": handle_anthropic_parallel_tools,
+    },
+    Mode.ANTHROPIC_TOON: {
+        "reask": reask_anthropic_toon,
+        "response": handle_anthropic_toon,
     },
 }
