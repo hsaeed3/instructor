@@ -171,7 +171,7 @@ class PartialBase(Generic[T_Model]):
 
         if mode == Mode.WRITER_TOOLS:
             yield from cls.writer_model_from_chunks(json_chunks, **kwargs)
-        elif mode == Mode.TOON:
+        elif mode in Mode.toon_modes():
             yield from cls.toon_model_from_chunks(
                 extract_code_block_from_stream(json_chunks), **kwargs
             )
@@ -190,7 +190,7 @@ class PartialBase(Generic[T_Model]):
         if mode == Mode.WRITER_TOOLS:
             async for item in cls.writer_model_from_chunks_async(json_chunks, **kwargs):
                 yield item
-        elif mode == Mode.TOON:
+        elif mode in Mode.toon_modes():
             toon_chunks = extract_code_block_from_stream_async(json_chunks)
             async for item in cls.toon_model_from_chunks_async(toon_chunks, **kwargs):
                 yield item
@@ -405,7 +405,11 @@ class PartialBase(Generic[T_Model]):
         json_started = False
         for chunk in completion:
             try:
-                if mode in {Mode.COHERE_TOOLS, Mode.COHERE_JSON_SCHEMA}:
+                if mode in {
+                    Mode.COHERE_TOOLS,
+                    Mode.COHERE_JSON_SCHEMA,
+                    Mode.COHERE_TOON,
+                }:
                     event_type = getattr(chunk, "event_type", None)
                     if event_type == "text-generation":
                         if text := getattr(chunk, "text", None):
@@ -538,13 +542,13 @@ class PartialBase(Generic[T_Model]):
                                     json_started = True
                                     args = args[json_start:]
                                 yield args
-                if mode == Mode.MISTRAL_STRUCTURED_OUTPUTS:
+                if mode in {Mode.MISTRAL_STRUCTURED_OUTPUTS, Mode.MISTRAL_TOON}:
                     yield chunk.data.choices[0].delta.content
                 if mode == Mode.MISTRAL_TOOLS:
                     if not chunk.data.choices[0].delta.tool_calls:
                         continue
                     yield chunk.data.choices[0].delta.tool_calls[0].function.arguments
-                if mode == Mode.ANTHROPIC_JSON:
+                if mode in {Mode.ANTHROPIC_JSON, Mode.ANTHROPIC_TOON}:
                     if json_chunk := chunk.delta.text:
                         yield json_chunk
                 if mode == Mode.ANTHROPIC_TOOLS:
@@ -556,7 +560,7 @@ class PartialBase(Generic[T_Model]):
                         chunk.candidates[0].content.parts[0].function_call.args
                     )
 
-                if mode == Mode.GENAI_STRUCTURED_OUTPUTS:
+                if mode in {Mode.GENAI_STRUCTURED_OUTPUTS, Mode.GENAI_TOON}:
                     try:
                         yield chunk.text
                     except ValueError as e:
@@ -605,6 +609,8 @@ class PartialBase(Generic[T_Model]):
                         Mode.PERPLEXITY_JSON,
                         Mode.WRITER_JSON,
                         Mode.TOON,
+                        Mode.XAI_TOON,
+                        Mode.BEDROCK_TOON,
                     }:
                         if json_chunk := chunk.choices[0].delta.content:
                             yield json_chunk
@@ -631,7 +637,11 @@ class PartialBase(Generic[T_Model]):
         json_started = False
         async for chunk in completion:
             try:
-                if mode in {Mode.COHERE_TOOLS, Mode.COHERE_JSON_SCHEMA}:
+                if mode in {
+                    Mode.COHERE_TOOLS,
+                    Mode.COHERE_JSON_SCHEMA,
+                    Mode.COHERE_TOON,
+                }:
                     event_type = getattr(chunk, "event_type", None)
                     if event_type == "text-generation":
                         if text := getattr(chunk, "text", None):
@@ -764,12 +774,12 @@ class PartialBase(Generic[T_Model]):
                                     json_started = True
                                     args = args[json_start:]
                                 yield args
-                if mode == Mode.ANTHROPIC_JSON:
+                if mode in {Mode.ANTHROPIC_JSON, Mode.ANTHROPIC_TOON}:
                     if json_chunk := chunk.delta.text:
                         yield json_chunk
                 if mode == Mode.ANTHROPIC_TOOLS:
                     yield chunk.delta.partial_json
-                if mode == Mode.MISTRAL_STRUCTURED_OUTPUTS:
+                if mode in {Mode.MISTRAL_STRUCTURED_OUTPUTS, Mode.MISTRAL_TOON}:
                     yield chunk.data.choices[0].delta.content
                 if mode == Mode.MISTRAL_TOOLS:
                     if not chunk.data.choices[0].delta.tool_calls:
@@ -781,7 +791,7 @@ class PartialBase(Generic[T_Model]):
                     yield json.dumps(
                         chunk.candidates[0].content.parts[0].function_call.args
                     )
-                if mode == Mode.GENAI_STRUCTURED_OUTPUTS:
+                if mode in {Mode.GENAI_STRUCTURED_OUTPUTS, Mode.GENAI_TOON}:
                     try:
                         yield chunk.text
                     except ValueError as e:
@@ -830,6 +840,8 @@ class PartialBase(Generic[T_Model]):
                         Mode.PERPLEXITY_JSON,
                         Mode.WRITER_JSON,
                         Mode.TOON,
+                        Mode.XAI_TOON,
+                        Mode.BEDROCK_TOON,
                     }:
                         if json_chunk := chunk.choices[0].delta.content:
                             yield json_chunk
