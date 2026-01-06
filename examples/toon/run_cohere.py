@@ -8,7 +8,7 @@ Usage:
     python run_cohere.py
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class User(BaseModel):
@@ -48,7 +48,10 @@ def main():
     user = client.chat.completions.create(
         model="command-r-plus",
         messages=[
-            {"role": "user", "content": "Extract: John is 30 and his email is john@example.com"}
+            {
+                "role": "user",
+                "content": "Extract: John is 30 and his email is john@example.com",
+            }
         ],
         response_model=User,
     )
@@ -66,7 +69,9 @@ def main():
         response_model=UserWithAddress,
     )
     print(f"   User: {result.user.name}, {result.user.age}")
-    print(f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}")
+    print(
+        f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}"
+    )
 
     print("\n" + "=" * 60)
     print("Done!")
@@ -75,4 +80,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -110,7 +110,9 @@ def _validate_model_from_json(
         raise
 
 
-def _coerce_enums_for_model(model: type[BaseModel], data: dict[str, Any]) -> dict[str, Any]:
+def _coerce_enums_for_model(
+    model: type[BaseModel], data: dict[str, Any]
+) -> dict[str, Any]:
     """Coerce string values to enum instances for fields that expect enums."""
     from enum import Enum
     import typing
@@ -130,7 +132,11 @@ def _coerce_enums_for_model(model: type[BaseModel], data: dict[str, Any]) -> dic
         if origin is typing.Union or str(origin) == "typing.Union":
             args = getattr(annotation, "__args__", ())
             for arg in args:
-                if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Enum):
+                if (
+                    arg is not type(None)
+                    and isinstance(arg, type)
+                    and issubclass(arg, Enum)
+                ):
                     annotation = arg
                     break
 
@@ -144,7 +150,9 @@ def _coerce_enums_for_model(model: type[BaseModel], data: dict[str, Any]) -> dic
 
         elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
             if isinstance(result[field_name], dict):
-                result[field_name] = _coerce_enums_for_model(annotation, result[field_name])
+                result[field_name] = _coerce_enums_for_model(
+                    annotation, result[field_name]
+                )
 
         elif origin is list:
             args = getattr(annotation, "__args__", ())
@@ -152,7 +160,9 @@ def _coerce_enums_for_model(model: type[BaseModel], data: dict[str, Any]) -> dic
                 item_model = args[0]
                 if isinstance(result[field_name], list):
                     result[field_name] = [
-                        _coerce_enums_for_model(item_model, item) if isinstance(item, dict) else item
+                        _coerce_enums_for_model(item_model, item)
+                        if isinstance(item, dict)
+                        else item
                         for item in result[field_name]
                     ]
 
@@ -523,6 +533,7 @@ class OpenAISchema(BaseModel):
         toon_content = _extract_toon_from_response(text)
         try:
             from toon_format import decode
+
             data = decode(toon_content)
             data = _coerce_enums_for_model(cls, data)
             return cls.model_validate(

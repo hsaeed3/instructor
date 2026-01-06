@@ -34,7 +34,9 @@ def _format_type_for_toon(annotation: Any, description: str) -> str:
         return f"<{choices}>"
 
     if origin is typing.Union:
-        args = [arg for arg in getattr(annotation, "__args__", ()) if arg is not type(None)]
+        args = [
+            arg for arg in getattr(annotation, "__args__", ()) if arg is not type(None)
+        ]
         type_names = []
         for t in args:
             if t is str:
@@ -196,13 +198,16 @@ def get_toon_reask_message(exception: Exception, previous_response: str = "") ->
         "Fix your TOON response:\n"
         "- int fields: whole numbers, no quotes (age: 25)\n"
         "- float fields: decimals, no quotes (price: 19.99)\n"
-        "- str fields: quoted (name: \"Alice\")\n"
+        '- str fields: quoted (name: "Alice")\n'
         "- Array [N] must match actual count\n\n"
         "Return corrected TOON in a ```toon code block."
     )
 
     if previous_response:
-        return f"Validation error:\n{exception}\n\nYour previous response:\n{previous_response}\n\n" + base_message.split("\n\n", 1)[1]
+        return (
+            f"Validation error:\n{exception}\n\nYour previous response:\n{previous_response}\n\n"
+            + base_message.split("\n\n", 1)[1]
+        )
 
     return base_message
 
@@ -221,4 +226,3 @@ def check_toon_import() -> None:
             "The 'toon-format' package is required for TOON mode. "
             "Install it with: pip install 'instructor[toon]' or pip install toon-format"
         ) from e
-

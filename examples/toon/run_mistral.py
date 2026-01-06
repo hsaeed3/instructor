@@ -8,7 +8,7 @@ Usage:
     python run_mistral.py
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import os
 
 
@@ -43,17 +43,23 @@ def main():
     print("Mistral TOON Mode (MISTRAL_TOON)")
     print("=" * 60)
 
-    client = instructor.from_mistral(Mistral(
-        # NOTE: for some reason this wasnt pulling key on it's own, not sure
-        # if it was intended to be this way.
-        api_key=os.environ.get("MISTRAL_API_KEY"),
-    ), mode=Mode.MISTRAL_TOON)
+    client = instructor.from_mistral(
+        Mistral(
+            # NOTE: for some reason this wasnt pulling key on it's own, not sure
+            # if it was intended to be this way.
+            api_key=os.environ.get("MISTRAL_API_KEY"),
+        ),
+        mode=Mode.MISTRAL_TOON,
+    )
 
     print("\n1. Simple extraction:")
     user = client.chat.completions.create(
         model="devstral-small-latest",
         messages=[
-            {"role": "user", "content": "Extract: John is 30 and his email is john@example.com"}
+            {
+                "role": "user",
+                "content": "Extract: John is 30 and his email is john@example.com",
+            }
         ],
         response_model=User,
     )
@@ -71,7 +77,9 @@ def main():
         response_model=UserWithAddress,
     )
     print(f"   User: {result.user.name}, {result.user.age}")
-    print(f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}")
+    print(
+        f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}"
+    )
 
     print("\n" + "=" * 60)
     print("Done!")
@@ -80,4 +88,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

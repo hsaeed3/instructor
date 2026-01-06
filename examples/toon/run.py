@@ -48,7 +48,9 @@ class Task(BaseModel):
 
 class Project(BaseModel):
     name: str = Field(description="Project name")
-    status: Literal["active", "completed", "on_hold"] = Field(description="Project status")
+    status: Literal["active", "completed", "on_hold"] = Field(
+        description="Project status"
+    )
     tasks: list[Task] = Field(description="List of project tasks")
 
 
@@ -68,7 +70,12 @@ def run_openai_example():
     print("\n1. Simple extraction:")
     user = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": "Extract: John is 30 and his email is john@example.com"}],
+        messages=[
+            {
+                "role": "user",
+                "content": "Extract: John is 30 and his email is john@example.com",
+            }
+        ],
         response_model=User,
     )
     print(f"   User: {user.name}, {user.age}, {user.email}")
@@ -86,7 +93,9 @@ def run_openai_example():
         response_model=UserWithAddress,
     )
     print(f"   User: {result.user.name}, {result.user.age}")
-    print(f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}")
+    print(
+        f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}"
+    )
 
     # Complex model with enums and lists
     print("\n3. Complex model with enums and lists:")
@@ -107,12 +116,16 @@ def run_openai_example():
     elapsed = time.time() - start
     print(f"   Project: {project.name} ({project.status})")
     for task in project.tasks:
-        print(f"   - {task.title}: {task.priority.value}, {task.estimated_hours}h, {task.tags}")
-    
+        print(
+            f"   - {task.title}: {task.priority.value}, {task.estimated_hours}h, {task.tags}"
+        )
+
     # Token usage
     if hasattr(project, "_raw_response") and hasattr(project._raw_response, "usage"):
         usage = project._raw_response.usage
-        print(f"   Tokens: {usage.prompt_tokens} in, {usage.completion_tokens} out, {usage.total_tokens} total")
+        print(
+            f"   Tokens: {usage.prompt_tokens} in, {usage.completion_tokens} out, {usage.total_tokens} total"
+        )
     print(f"   Time: {elapsed:.2f}s")
 
 
@@ -138,7 +151,12 @@ def run_anthropic_example():
     user = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        messages=[{"role": "user", "content": "Extract: John is 30 and his email is john@example.com"}],
+        messages=[
+            {
+                "role": "user",
+                "content": "Extract: John is 30 and his email is john@example.com",
+            }
+        ],
         response_model=User,
     )
     print(f"   User: {user.name}, {user.age}, {user.email}")
@@ -157,7 +175,9 @@ def run_anthropic_example():
         response_model=UserWithAddress,
     )
     print(f"   User: {result.user.name}, {result.user.age}")
-    print(f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}")
+    print(
+        f"   Address: {result.address.street}, {result.address.city}, {result.address.zip}"
+    )
 
 
 def compare_modes():
@@ -205,7 +225,6 @@ def compare_modes():
         print(f"\n  Token savings vs JSON/MD_JSON/TOOLS:")
         for r in results[1:]:
             if r["tokens"] > 0:
-
                 savings = (r["tokens"] - baseline) / r["tokens"] * 100
                 print(f"    {r['mode']} saves {savings:.1f}% vs TOON")
 
@@ -226,4 +245,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

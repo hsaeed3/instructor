@@ -1122,7 +1122,9 @@ def reask_genai_toon(
     kwargs["contents"].append(
         types.ModelContent(
             parts=[
-                types.Part.from_text(text=get_toon_reask_message(exception, genai_response)),
+                types.Part.from_text(
+                    text=get_toon_reask_message(exception, genai_response)
+                ),
             ]
         ),
     )
@@ -1162,7 +1164,9 @@ def handle_genai_toon(
         system_message = new_kwargs.pop("system") + "\n\n" + toon_message
     elif new_kwargs.get("messages"):
         base_system = extract_genai_system_message(new_kwargs["messages"])
-        system_message = base_system + "\n\n" + toon_message if base_system else toon_message
+        system_message = (
+            base_system + "\n\n" + toon_message if base_system else toon_message
+        )
     else:
         system_message = toon_message
 
